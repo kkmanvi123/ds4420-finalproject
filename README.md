@@ -1,1 +1,2 @@
-# ds4420-finalproject
+## DS4420 Final Project
+#### Annika Salpukas, Ruby Mason, Manvi Kottakota
