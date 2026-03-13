@@ -9,7 +9,7 @@ This project explores predicting cognitive decline metrics using machine learnin
 2. **Multi-Layer Perceptron (MLP)** from MRI-derived metadata to predict the presence of AD or a cognitive score.
 3. **Bayesian Modeling** using clinical visit functional test scores to estimate probabalistic disease progression.
 
-## Datsets
+## Datasets
 The National Alzheimer’s Coordinating Center (NACC) aggregates data from more than 40 Alzheimer's Disease Research Centers (ADRCs) across the country. The NACC houses a number of datasets relating to AD including: longitudinal patient phenotype and cognitive data, fluid biomarker data, imaging data, and more. 
 Two subsets of the NACC database are used in this project.
 
