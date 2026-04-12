@@ -8,6 +8,11 @@ from mlp import MLPClassifier, MLPRegressor
 from pca import prepare_pca_features, PCATransformer
 from trainer import MLPTrainer
 
+import os
+import json
+import pickle
+import torch
+
 
 def split_dataframe(
     df: pd.DataFrame,
@@ -82,12 +87,38 @@ def prepare_split_dataframes(
 
     return X_train, X_val, X_test, y_train, y_val, y_test, pca_transformer
 
+def convert_to_json(obj):
+    """
+    Convert numpy/pandas values into JSON Python types.
+    """
+    if isinstance(obj, dict):
+        return {str(k): convert_to_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [convert_to_json(v) for v in obj]
+    if isinstance(obj, tuple):
+        return [convert_to_json(v) for v in obj]
+    if hasattr(obj, "tolist"):
+        return obj.tolist()
+    if isinstance(obj, (int, float, str, bool)) or obj is None:
+        return obj
+    return str(obj)
 
 def main():
     parser = argparse.ArgumentParser(
         description="Run merged imaging + visitation data through PCA + MLP."
     )
     parser.add_argument("--data_dir", type=str, default="data", help="Folder containing the zip files.")
+    parser.add_argument(
+        "--save_dir",
+        type=str,
+        default="outputs",
+        help="Directory to save checkpoints, metrics, and artifacts."
+    )
+    parser.add_argument(
+        "--save_model",
+        action="store_true",
+        help="Save trained model checkpoint and metadata."
+    )
     parser.add_argument(
         "--modality",
         type=str,
@@ -319,7 +350,60 @@ def main():
             split="test"
         )
         
-    print("Plots saved!")
+    print("Plots saved to: plots!")
+    
+    # 9. Save outputs / checkpoint
+    os.makedirs(args.save_dir, exist_ok=True)
+
+    experiment_name = f"{args.modality}_{args.target_col}"
+    experiment_dir = os.path.join(args.save_dir, experiment_name)
+    os.makedirs(experiment_dir, exist_ok=True)
+
+    # Save metrics and history
+    results = {
+        "experiment_name": experiment_name,
+        "task": task,
+        "target_col": target_col,
+        "modality": args.modality,
+        "args": vars(args),
+        "history": convert_to_json(history),
+        "val_metrics": convert_to_json(val_metrics),
+        "test_metrics": convert_to_json(test_metrics),
+        "class_names": convert_to_json(class_names) if task == "classification" else None,
+    }
+
+    with open(os.path.join(experiment_dir, "results.json"), "w") as f:
+        json.dump(results, f, indent=2)
+
+    # Save PCA transformer
+    with open(os.path.join(experiment_dir, "pca_transformer.pkl"), "wb") as f:
+        pickle.dump(pca_transformer, f)
+
+    # Save model checkpoint
+    if args.save_model:
+        checkpoint = {
+            "model_state_dict": model.state_dict(),
+            "task": task,
+            "target_col": target_col,
+            "modality": args.modality,
+            "input_dim": X_train.shape[1],
+            "hidden_dims": args.hidden_dims,
+            "dropout": args.dropout,
+            "activation": args.activation,
+            "use_batchnorm": args.use_batchnorm,
+            "lr": args.lr,
+            "weight_decay": args.weight_decay,
+            "n_components": args.n_components,
+            "class_names": class_names if task == "classification" else None,
+            "category_map": category_map if task == "classification" else None,
+        }
+
+        if task == "classification":
+            checkpoint["num_classes"] = len(class_names)
+
+        torch.save(checkpoint, os.path.join(experiment_dir, "model_checkpoint.pt"))
+
+    print(f"Saved outputs to: {experiment_dir}!")
 
 
 if __name__ == "__main__":
