@@ -73,7 +73,7 @@ def load_visitation_data(
     
     # Columns that need to be loaded
     # This is where we can control what "target col" metric for the mlp
-    cols = ["NACCID", "VISITYR", "VISITMO", "VISITDAY", "NACCMMSE", "CDRGLOB", "CDRSUM", "DEMENTED"]
+    cols = ["NACCID", "VISITYR", "VISITMO", "VISITDAY", "NACCMMSE", "CDRSUM", "MEMORY", "CDRLANG", "DEMENTED"]
     
     return load_csv_from_zip(zip_path, extract_dir, csv_name, cols)
 
@@ -134,6 +134,13 @@ def prepare_visit_df(visit_df: pd.DataFrame) -> pd.DataFrame:
     ID_COL = "NACCID"
     visit_df = visit_df.rename(columns={ID_COL: "ID"})
     visit_df["ID"] = visit_df["ID"].astype(str).str.strip()
+    
+    # Replace missing data values with NaN
+    target_cols = ["NACCMMSE", "CDRSUM", "MEMORY", "CDRLANG", "DEMENTED"]
+    missing_codes = [-4, 88, 95, 96, 97, 98]
+
+    # Replace them with NaN
+    visit_df[target_cols] = visit_df[target_cols].replace(missing_codes, pd.NA)
 
     # Visit date split, convert to datetime
     visit_df["VISIT_DATE"] = pd.to_datetime(

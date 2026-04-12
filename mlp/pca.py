@@ -7,7 +7,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
 
 # Possible target cols (coming from the visitation file)
-TARGET_COLS = ["NACCMMSE", "CDRGLOB", "CDRSUM", "DEMENTED"]
+TARGET_COLS = ["NACCMMSE", "CDRSUM", "MEMORY", "CDRLANG", "DEMENTED"]
 
 def clean_features(
     df: pd.DataFrame,

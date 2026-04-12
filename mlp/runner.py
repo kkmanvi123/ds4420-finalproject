@@ -21,6 +21,7 @@ def split_dataframe(
     Split dataframe into train/val/test before PCA fitting.
     val_size is the fraction of the train+val pool after test split.
     """
+    # Drop any cols where the target_col has no data
     df = df.dropna(subset=[target_col]).copy()
 
     stratify_labels = None
@@ -192,9 +193,9 @@ def main():
     print(f"Using target column: {target_col}")
     print(f"Task: {task}")
     
-    print("\n=== Splitting Data ===\n")
 
     # 3. Split first
+    print("\n=== Splitting Data ===\n")
     train_df, val_df, test_df = split_dataframe(
         df=df,
         target_col=target_col,
@@ -206,9 +207,10 @@ def main():
     print(f"Val shape:   {val_df.shape}")
     print(f"Test shape:  {test_df.shape}")
     
-    print("\n=== Perform PCA ===\n")
+    
 
     # 4. PCA preprocessing with train-only fit
+    print("\n=== Perform PCA ===\n")
     X_train, X_val, X_test, y_train, y_val, y_test, pca_transformer = prepare_split_dataframes(
         train_df=train_df,
         val_df=val_df,
@@ -223,9 +225,8 @@ def main():
 
     # 5. Encode targets + build loaders
     if task == "classification":
-        y_train = pd.Series(y_train).astype("category")
-        class_names = list(y_train.cat.categories)
-
+        # Get the class names
+        class_names = sorted(df[target_col].dropna().unique().tolist())
         category_map = {cat: i for i, cat in enumerate(class_names)}
 
         y_train_enc = pd.Series(train_df[target_col]).map(category_map).to_numpy()
@@ -270,15 +271,17 @@ def main():
             use_batchnorm=args.use_batchnorm,
         )
 
-    print("\n=== Running MLP ===\n")
+    
     # 6. Train
+    print("\n=== Running MLP ===\n")
     trainer = MLPTrainer(
         model=model,
         task=task,
+        class_names=class_names if task == "classification" else None,
         lr=args.lr,
         weight_decay=args.weight_decay
     )
-    trainer.fit(train_loader, val_loader=val_loader, epochs=args.epochs)
+    history = trainer.fit(train_loader, val_loader=val_loader, epochs=args.epochs)
 
     # 7. Evaluate
     print("\n=== Validation Metrics ===")
@@ -290,6 +293,33 @@ def main():
     test_metrics = trainer.evaluate(test_loader)
     for k, v in test_metrics.items():
         print(f"{k}: {v}")
+        
+    # 8. Create plots and save to a plots folder
+    experiment_name = f"{args.modality}_{args.target_col}"
+    trainer.plot_training_history(
+        history,
+        save_dir="plots",
+        experiment_name=experiment_name
+    )
+
+    if task == "classification":
+        trainer.plot_confusion_matrix(
+            val_metrics,
+            class_names=class_names,
+            save_dir="plots",
+            experiment_name=experiment_name,
+            split="val"
+        )
+        
+        trainer.plot_confusion_matrix(
+            test_metrics,
+            class_names=class_names,
+            save_dir="plots",
+            experiment_name=experiment_name,
+            split="test"
+        )
+        
+    print("Plots saved!")
 
 
 if __name__ == "__main__":

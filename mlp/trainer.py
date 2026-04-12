@@ -1,16 +1,20 @@
 import torch
 import numpy as np
 from metrics import classification_metrics, regression_metrics
+from sklearn.metrics import ConfusionMatrixDisplay
+import matplotlib.pyplot as plt
+import os
 
 
 class MLPTrainer:
-    def __init__(self, model, task, lr=1e-3, weight_decay=0.0, device=None):
+    def __init__(self, model, task, class_names=None, lr=1e-3, weight_decay=0.0, device=None):
         """
         model: the MLP model (classifier or regressor)
         task: 'classification' or 'regression'
         """
 
         self.task = task
+        self.class_names = class_names
 
         # Use GPU if available
         self.device = device if device else ("cuda" if torch.cuda.is_available() else "cpu")
@@ -102,10 +106,15 @@ class MLPTrainer:
 
         # Add task-specific metrics
         if self.task == "classification":
+            # print("Unique y_true:", np.unique(all_targets))
+            # print("Unique y_pred:", np.unique(all_preds))
+            # print("Class mapping:", list(enumerate(self.class_names)))
+
             results.update(
                 classification_metrics(
                     np.array(all_targets),
-                    np.array(all_preds)
+                    np.array(all_preds),
+                    class_names=self.class_names
                 )
             )
         else:
@@ -178,3 +187,76 @@ class MLPTrainer:
                     )
 
         return history
+    
+    def plot_training_history(self, history, save_dir=None, experiment_name="experiment"):
+        """
+        Plot metrics over epochs.
+        """
+        epochs = range(1, len(history["train_loss"]) + 1)
+
+        # Loss plot
+        plt.figure(figsize=(8, 5))
+        plt.plot(epochs, history["train_loss"], marker="o", label="Train Loss")
+        if len(history["val_loss"]) > 0:
+            plt.plot(epochs, history["val_loss"], marker="o", label="Val Loss")
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
+        title = f"{experiment_name} | Loss over Epochs"
+        plt.title(title)
+        plt.legend()
+        plt.grid(True)
+        if save_dir:
+            os.makedirs(save_dir, exist_ok=True)
+            plt.savefig(os.path.join(save_dir, f"{experiment_name}_loss.png"), bbox_inches="tight")
+        plt.close()
+
+        if self.task == "classification":
+            metric_names = ["accuracy", "precision", "recall", "f1"]
+        else:
+            metric_names = ["mae", "rmse", "r2"]
+
+        # Metric plots
+        for metric_name in metric_names:
+            train_vals = [m[metric_name] for m in history["train_metrics"]]
+            val_vals = [m[metric_name] for m in history["val_metrics"]] if len(history["val_metrics"]) > 0 else []
+
+            plt.figure(figsize=(8, 5))
+            plt.plot(epochs, train_vals, marker="o", label=f"Train {metric_name.upper()}")
+            if len(val_vals) > 0:
+                plt.plot(epochs, val_vals, marker="o", label=f"Val {metric_name.upper()}")
+            plt.xlabel("Epoch")
+            plt.ylabel(metric_name.upper())
+            title = f"{experiment_name} | {metric_name.upper()} over Epochs"
+            plt.title(title)
+            plt.legend()
+            plt.grid(True)
+            
+            if save_dir:
+                plt.savefig(
+                    os.path.join(save_dir, f"{experiment_name}_{metric_name}.png"),
+                    bbox_inches="tight")
+
+            plt.close()
+            
+    def plot_confusion_matrix(self, metrics_dict, class_names=None, save_dir=None, experiment_name="experiment", split="val"):
+        """
+        Plot confusion matrix for classification results.
+        """
+        cm = metrics_dict["confusion_matrix"]
+        
+        if class_names is None:
+            class_names = metrics_dict.get("class_names")
+            
+        plt.figure(figsize=(6, 6))
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=class_names)
+        disp.plot(cmap="Blues", values_format="d")
+        title = f"{experiment_name} | {split.upper()} Confusion Matrix"
+        plt.title(title)
+
+        if save_dir:
+            os.makedirs(save_dir, exist_ok=True)
+            filename = f"{experiment_name}_{split}_confusion_matrix.png"
+            plt.savefig(os.path.join(save_dir, filename), bbox_inches="tight")
+
+        plt.close()
+        
