@@ -26,14 +26,17 @@ def split_dataframe(
     Split dataframe into train/val/test before PCA fitting.
     """
     # Drop any cols where the target_col has no data
-    df = df.dropna(subset=[target_col]).copy()
+    dropped_df = df.dropna(subset=[target_col]).copy()
+    num_dropped_rows = df.shape[0] - dropped_df.shape[0]
+    print(f"{num_dropped_rows} rows dropped due to invalid target column: {target_col} data.")
 
+    # Keep the label dist consistent
     stratify_labels = None
     if task == "classification":
-        stratify_labels = df[target_col]
+        stratify_labels = dropped_df[target_col]
 
     train_val_df, test_df = train_test_split(
-        df,
+        dropped_df,
         test_size=test_size,
         random_state=random_state,
         stratify=stratify_labels
@@ -50,7 +53,7 @@ def split_dataframe(
         stratify=stratify_labels_train
     )
 
-    return train_df, val_df, test_df
+    return train_df, val_df, test_df, num_dropped_rows
 
 
 def prepare_split_dataframes(
@@ -162,7 +165,7 @@ def main():
         "--target_col",
         type=str, 
         required=True,
-        choices=["NACCMMSE", "CDRSUM", "MEMORY", "CDRLANG", "DEMENTED"],
+        choices=["NACCMMSE", "NACCMOCA", "CDRSUM", "MEMORY", "CDRLANG", "DEMENTED"],
         help="Target column name."
     )
     parser.add_argument(
@@ -271,7 +274,7 @@ def main():
 
     # 3. Split first
     print("\n=== Splitting Data ===\n")
-    train_df, val_df, test_df = split_dataframe(
+    train_df, val_df, test_df, num_dropped_rows = split_dataframe(
         df=df,
         target_col=target_col,
         task=task,
@@ -409,6 +412,7 @@ def main():
         "matched_row_count": matched_rows,
         "unmatched_row_count": unmatched_rows,
         "merged_shape": df.shape,
+        "num_dropped_rows": num_dropped_rows,
         "experiment_name": run_name,
         "task": task,
         "target_col": target_col,
