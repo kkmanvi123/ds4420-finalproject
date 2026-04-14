@@ -53,14 +53,31 @@ class PCATransformer:
 
     def __init__(self, n_components=30):
         # Handle the PCA as a int or ratio
-        if isinstance(n_components, float) and n_components >= 1:
-            if n_components.is_integer():
-                n_components = int(n_components)
+        if isinstance(n_components, float):
+            if 0 < n_components < 1:
+                # Variance ratio keep as a float
+                pass
+            elif n_components == 1.0:
+                # Keep all components (remove PCA)
+                n_components = None
+            else:
+                raise ValueError("Float n_components must be between 0 and 1!")
+
+        elif isinstance(n_components, int):
+            pass  # Valid as an number of components
+        
+        # if isinstance(n_components, float) and n_components >= 1:
+        #     if n_components.is_integer():
+        #         n_components = int(n_components)
                 
         self.n_components = n_components
         self.imputer = SimpleImputer(strategy="median")
         self.scaler = StandardScaler()
-        self.pca = PCA(n_components=n_components)
+        
+        if n_components is None:
+            self.pca = PCA()  # Keeps all components
+        else:
+            self.pca = PCA(n_components=n_components)
 
         self.feature_names_: Optional[list[str]] = None
         self.is_fitted = False

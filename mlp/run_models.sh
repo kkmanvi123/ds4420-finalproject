@@ -169,3 +169,23 @@ python runner.py \
 --use_batchnorm \
 --weight_decay 1e-4 \
 --run_name "mri_NACCMOCA_regression_baseline"
+
+# Start the tuning
+echo "\nTuning the models..."
+echo "\n--- Input: MRI, Target: MOCA ---"
+python runner.py \
+--data_dir ../data \
+--save_model \
+--save_dir outputs \
+--modality mri \
+--target_col NACCMOCA \
+--task regression \
+--n_components 0.95 \
+--epochs 20 \
+--batch_size 64 \
+--lr 1e-3 \
+--hidden_dims 256,128,64 \
+--dropout 0.3 \
+--activation relu \
+--use_batchnorm \
+--weight_decay 1e-4
