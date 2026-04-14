@@ -1,5 +1,5 @@
 ---
-title: "Bayesian Model for Cognitive Decline Prediction"
+title: "Bayesian Linear Regression for Cognitive Decline Prediction"
 author: "Manvi, Annika, Ruby"
 date: "April 11, 2026"
 output: pdf_document
