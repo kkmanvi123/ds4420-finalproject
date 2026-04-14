@@ -1,4 +1,4 @@
-# pip install -r requirements.txt
+#pip install -r requirements.txt
 
 echo "--- Input: MRI, Target: DEMENTED ---"
 python runner.py \
@@ -8,7 +8,7 @@ python runner.py \
 --modality mri \
 --target_col DEMENTED \
 --task classification \
---n_components 0.95 \
+--n_components 30 \
 --epochs 20 \
 --batch_size 64 \
 --lr 1e-3 \

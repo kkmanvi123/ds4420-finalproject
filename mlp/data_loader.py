@@ -214,14 +214,14 @@ def merge_imaging_with_visits(
         print(merged.loc[matched_mask, "DATE_GAP_DAYS"].describe())
         
     # Drop rows where there is no clinical data
-    print(f"Dropping {unmatched_rows} rows where there is no associated visit data.")
+    print(f"\nDropping {unmatched_rows} rows where there is no associated visit data.")
     merged = merged.dropna(subset=["VISIT_DATE"])
 
     print("\nMerged date preview:")
     preview_cols = [col for col in ["ID", "IMAGE_DATE", "VISIT_DATE", "DATE_GAP_DAYS"] if col in merged.columns]
     print(merged[preview_cols].head(15))
 
-    return merged
+    return merged, matched_rows, unmatched_rows
 
 
 def build_merged_dataset(
@@ -249,22 +249,20 @@ def build_merged_dataset(
     imaging_df = prepare_imaging_df(imaging_df, modality)
     visit_df = prepare_visit_df(visit_df)
 
-    merged_df = merge_imaging_with_visits(
+    merged_df, matched_rows, unmatched_rows = merge_imaging_with_visits(
         imaging_df=imaging_df,
         visit_df=visit_df,
         tolerance_days=tolerance_days,
     )
 
     print("\n=== FINAL MERGED DATASET SUMMARY ===")
+    original_imaging_rows = imaging_df.shape[0]
+    print("Original imaging row count: ", original_imaging_rows)
+    print("Matched rows: ", matched_rows)
+    print("Unmatched rows: ", unmatched_rows)
     print("Merged shape:", merged_df.shape)
 
-    # Should have 0 unmatched since we dropped!
-    if "VISIT_DATE" in merged_df.columns:
-        matched_rows = merged_df["VISIT_DATE"].notna().sum()
-        print("Matched rows:", matched_rows)
-        print("Unmatched rows:", len(merged_df) - matched_rows)
-
-    return merged_df
+    return merged_df, original_imaging_rows, matched_rows, unmatched_rows 
 
 
 if __name__ == "__main__":

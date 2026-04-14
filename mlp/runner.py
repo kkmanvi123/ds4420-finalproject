@@ -24,7 +24,6 @@ def split_dataframe(
 ):
     """
     Split dataframe into train/val/test before PCA fitting.
-    val_size is the fraction of the train+val pool after test split.
     """
     # Drop any cols where the target_col has no data
     df = df.dropna(subset=[target_col]).copy()
@@ -103,6 +102,21 @@ def convert_to_json(obj):
         return obj
     return str(obj)
 
+def run_outputs_exist(experiment_dir: str, save_model: bool) -> bool:
+    """
+    Check whether the expected saved outputs for a run already exist.
+    """
+    required_files = [
+        os.path.join(experiment_dir, "results.json"),
+        os.path.join(experiment_dir, "pca_transformer.pkl"),
+    ]
+
+    if save_model:
+        required_files.append(os.path.join(experiment_dir, "model_checkpoint.pt"))
+
+    return all(os.path.exists(path) for path in required_files)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Run merged imaging + visitation data through PCA + MLP."
@@ -112,12 +126,18 @@ def main():
         "--save_dir",
         type=str,
         default="outputs",
-        help="Directory to save checkpoints, metrics, and artifacts."
+        help="Directory to save model outout."
     )
     parser.add_argument(
         "--save_model",
         action="store_true",
         help="Save trained model checkpoint and metadata."
+    )
+    parser.add_argument("--run_name", type=str, default=None, help="Custom name of the run for saving.")
+    parser.add_argument(
+        "--force_rerun",
+        action="store_true",
+        help="Force rerun even if saved outputs already exist."
     )
     parser.add_argument(
         "--modality",
@@ -138,7 +158,13 @@ def main():
         default="investigator_ftldlbd_nacc72.csv",
         help="Exact CSV name inside visitation zip."
     )
-    parser.add_argument("--target_col", type=str, required=True, help="Target column name.")
+    parser.add_argument(
+        "--target_col",
+        type=str, 
+        required=True,
+        choices=["NACCMMSE", "CDRSUM", "MEMORY", "CDRLANG", "DEMENTED"],
+        help="Target column name."
+    )
     parser.add_argument(
         "--task",
         type=str,
@@ -163,7 +189,7 @@ def main():
         "--hidden_dims",
         type=str,
         default="128,64",
-        help="Comma-separated hidden layer sizes, e.g. '128,64' or '256,128,64'"
+        help="Comma-separated hidden layer sizes, e.g. '128,64'."
     )
     parser.add_argument(
         "--dropout",
@@ -202,17 +228,35 @@ def main():
         args.n_components = int(args.n_components)
         
     args.hidden_dims = [int(x.strip()) for x in args.hidden_dims.split(",") if x.strip()]
-
+    
+    run_name = args.run_name or (
+        f"{args.modality}_{args.target_col}_{args.task}"
+        f"_pca{args.n_components}"
+        f"_h{'-'.join(map(str, args.hidden_dims))}"
+        f"_do{args.dropout}"
+        f"_lr{args.lr}"
+        f"_bs{args.batch_size}"
+        f"_e{args.epochs}"
+    )
+    
+    experiment_dir = os.path.join(args.save_dir, run_name)
+    
+    # Check if a saved model already exists
+    if run_outputs_exist(experiment_dir, save_model=args.save_model):
+        if args.force_rerun:
+            print(f"Existing outputs found for {run_name}, but --force_rerun included. Rerunning...")
+        else:
+            print(f"Skipping run: saved outputs already exist at {experiment_dir}")
+            return
+    
     # 1. Build merged dataset
-    df = build_merged_dataset(
+    df, original_imaging_rows, matched_rows, unmatched_rows = build_merged_dataset(
         data_dir=args.data_dir,
         modality=args.modality,
         visit_zip_name=args.visit_zip_name,
         visit_csv_name=args.visit_csv_name,
         tolerance_days=args.match_tolerance_days,
     )
-
-    print(f"\nLoaded merged dataframe: {df.shape}")
 
     # 2. Get target/task
     target_col = args.target_col
@@ -239,8 +283,7 @@ def main():
     print(f"Test shape:  {test_df.shape}")
     
     
-
-    # 4. PCA preprocessing with train-only fit
+    # 4. PCA preprocessing fit on train
     print("\n=== Perform PCA ===\n")
     X_train, X_val, X_test, y_train, y_val, y_test, pca_transformer = prepare_split_dataframes(
         train_df=train_df,
@@ -250,9 +293,11 @@ def main():
         n_components=args.n_components,
     )
 
+    print()
     print(f"Final train PCA shape: {X_train.shape}")
     print(f"Final val PCA shape:   {X_val.shape}")
     print(f"Final test PCA shape:  {X_test.shape}")
+
 
     # 5. Encode targets + build loaders
     if task == "classification":
@@ -326,42 +371,45 @@ def main():
         print(f"{k}: {v}")
         
     # 8. Create plots and save to a plots folder
-    experiment_name = f"{args.modality}_{args.target_col}"
+    plot_save_dir = os.path.join("plots", run_name)
     trainer.plot_training_history(
         history,
-        save_dir="plots",
-        experiment_name=experiment_name
+        save_dir=plot_save_dir,
+        experiment_name=run_name
     )
 
     if task == "classification":
         trainer.plot_confusion_matrix(
             val_metrics,
             class_names=class_names,
-            save_dir="plots",
-            experiment_name=experiment_name,
+            save_dir=plot_save_dir,
+            experiment_name=run_name,
             split="val"
         )
         
         trainer.plot_confusion_matrix(
             test_metrics,
             class_names=class_names,
-            save_dir="plots",
-            experiment_name=experiment_name,
+            save_dir=plot_save_dir,
+            experiment_name=run_name,
             split="test"
         )
         
-    print("Plots saved to: plots!")
+    print(f"Plots saved to: {plot_save_dir}!")
     
     # 9. Save outputs / checkpoint
     os.makedirs(args.save_dir, exist_ok=True)
 
-    experiment_name = f"{args.modality}_{args.target_col}"
-    experiment_dir = os.path.join(args.save_dir, experiment_name)
+    experiment_dir = os.path.join(args.save_dir, run_name)
     os.makedirs(experiment_dir, exist_ok=True)
 
     # Save metrics and history
     results = {
-        "experiment_name": experiment_name,
+        "original_imaging_row_count": original_imaging_rows,
+        "matched_row_count": matched_rows,
+        "unmatched_row_count": unmatched_rows,
+        "merged_shape": df.shape,
+        "experiment_name": run_name,
         "task": task,
         "target_col": target_col,
         "modality": args.modality,
