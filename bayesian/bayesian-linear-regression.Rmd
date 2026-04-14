@@ -42,9 +42,7 @@ split_patient <- function(sub) {
 }
 ```
 
----
-
-## Threshold Selection
+## Select the best threshold
 
 We want to figure out the right minimum number of visits to require. If the threshold is too low, we won’t have enough data per patient, and if it’s too high, we’ll lose too many patients. We’ll loop over thresholds from 4 to 8 visits, run the full Gibbs sampler for each, and select the one with the lowest RMSE on the test visits.
 
@@ -287,8 +285,6 @@ cat("Population residual variance:   ", round(resid_var, 3), "\n")
 cat("IG prior: alpha0 =", alpha0, "| beta0 =", round(beta0, 3), "\n")
 ```
 
----
-
 ## Gibbs Sampler
 
 Now we use a Gibbs sampler to get the posterior over line parameters for each patient. It runs 2000 iterations, and in each one we alternate between two steps:
@@ -361,9 +357,7 @@ if (file.exists(SAMPLES_FILE)) {
 }
 ```
 
----
-
-## Convergence Diagnostics
+## Check for Convergence
 
 Before trusting the results, we check that the Gibbs sampler actually converged. 
 
