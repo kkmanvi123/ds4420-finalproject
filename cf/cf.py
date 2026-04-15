@@ -24,8 +24,6 @@ class CollaborativeFiltering:
         self.item_stds = None
         self.user_means = None
 
-        np.random.seed(42)
-
         self.preprocess()
 
     def preprocess(self) -> None:
@@ -108,7 +106,8 @@ class CollaborativeFiltering:
         
 
     def validate(self, sample_size=500) -> pd.DataFrame:
-        validation_users = np.random.choice(self.df.index, size=sample_size, replace=False)
+        rng = np.random.default_rng(seed=42)
+        validation_users = rng.choice(self.df.index, size=sample_size, replace=False)
 
         # test different values for similarity metrics and k
         grid = [
@@ -141,12 +140,13 @@ class CollaborativeFiltering:
         return pd.DataFrame(records)
     
     def evaluate(self, metric: str, k: int, sample_size=500) -> pd.DataFrame:
-        #evaluation_users = np.random.choice(self.df.index, size=sample_size, replace=False)
+        rng = np.random.default_rng(seed=8)
+        evaluation_users = rng.choice(self.df.index, size=sample_size, replace=False)
 
         # perform evaluation on sampled users
         tasks = [
             (self, user, feat, metric, k)
-            for user in self.df.index
+            for user in evaluation_users
             for feat in self.df.columns
             if not pd.isna(self.df.loc[user, feat])
         ]
