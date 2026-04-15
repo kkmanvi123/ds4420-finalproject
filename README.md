@@ -1,5 +1,5 @@
 # Predicting Alzheimer's Related Cognitive Decline
-Annika Salpukas, Ruby Mason, Manvi Kottakota
+Annika Salpukas, Manvi Kottakota, Ruby Mason
 
 ## Overview
 Alzheimer’s disease (AD) is a form of dementia that progresses slowly, affecting memory, thinking, and behavior. Over time, the disease damages brain cells, leading to worsening cognitive decline. Early stages of AD often include short-term memory loss, impaired thinking, and difficulty with problem solving, while later stages involve severe cognitive impairment, physical decline, and the need for full-time care. Although AD currently has no cure, the ability to detect early cognitive decline can help doctors monitor disease progression, and family members have a better treatment plan for the patient.
