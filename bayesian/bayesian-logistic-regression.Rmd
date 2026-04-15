@@ -1,0 +1,289 @@
+---
+title: "Bayesian Logistic Regression for Cognitive Decline"
+author: "Manvi, Annika, Ruby"
+date: "April 11, 2026"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+set.seed(42)
+```
+
+## Overview
+
+Instead of predicting a continuous MMSE score visit by visit, this model predict whether a patient's MMSE score falls below 24 by the end of their observation period. A score below 24 is the standard clinical cutoff for mild cognitive impairment, so this is asking whether the patient crossed into clinically meaningful threshold. We predict the binary outcome based on the patient's age and their starting MMSE score. 
+
+## Data Preparation
+
+```{r data-prep}
+con <- unz("/Users/kkmanas/ds4420-finalproject/data/NACC_visitation_data.zip",
+           "investigator_ftldlbd_nacc72.csv")
+df_raw <- read.csv(con)
+
+df <- df_raw[, c("NACCID", "NACCAGE", "NACCMMSE")]
+
+sentinel_vals <- c(88, 95, 96, 97, 98, -4)
+df$NACCMMSE[df$NACCMMSE %in% sentinel_vals] <- NA
+df <- df[!is.na(df$NACCMMSE) & !is.na(df$NACCAGE), ]
+
+df <- df[order(df$NACCID, df$NACCAGE), ]
+
+cat("Rows after cleaning:", nrow(df), "\n")
+cat("Unique patients:    ", length(unique(df$NACCID)), "\n")
+```
+
+## Define Binary Outcome
+
+For each patient, we use their baseline visit (first recorded) and their last recorded MMSE. If the last MMSE is below 24 — the clinical cutoff for mild cognitive impairment — we label that patient as impaired (1). Otherwise, 0. We also require at least 3 visits so there's a meaningful trajectory to observe.
+
+```{r binary-outcome}
+MMSE_THRESHOLD <- 24  # standard clinical cutoff for mild cognitive impairment
+
+patient_summary <- do.call(rbind, lapply(split(df, df$NACCID), function(sub) {
+  if (nrow(sub) < 3) return(NULL)
+  data.frame(
+    NACCID         = sub$NACCID[1],
+    age_baseline   = sub$NACCAGE[1],
+    mmse_baseline  = sub$NACCMMSE[1],
+    mmse_last      = sub$NACCMMSE[nrow(sub)],
+    n_visits       = nrow(sub)
+  )
+}))
+
+# Binary label: last MMSE fell below clinical impairment threshold
+patient_summary$impaired <- as.integer(
+  patient_summary$mmse_last < MMSE_THRESHOLD
+)
+
+cat("Total patients:        ", nrow(patient_summary), "\n")
+cat("Impaired (label=1):    ", sum(patient_summary$impaired), "\n")
+cat("Not impaired (label=0):", sum(patient_summary$impaired == 0), "\n")
+cat("Impairment rate:       ", round(mean(patient_summary$impaired) * 100, 1), "%\n")
+```
+
+## Exploratory Data Analysis
+
+```{r eda, fig.height=5, fig.width=10}
+library(ggplot2)
+
+# Baseline MMSE by outcome
+ggplot(patient_summary, aes(x = mmse_baseline, fill = factor(impaired))) +
+  geom_histogram(binwidth = 1, position = "dodge", alpha = 0.8) +
+  scale_fill_manual(values = c("steelblue", "firebrick"),
+                    labels = c("Not Impaired", "Impaired")) +
+  geom_vline(xintercept = MMSE_THRESHOLD, linetype = "dashed", color = "gray40") +
+  labs(title = "Baseline MMSE by Impairment Status",
+       subtitle = "Dashed line = clinical threshold (MMSE < 24)",
+       x = "Baseline MMSE", y = "Count", fill = "Outcome") +
+  theme_minimal()
+
+# Baseline age by outcome
+ggplot(patient_summary, aes(x = age_baseline, fill = factor(impaired))) +
+  geom_histogram(binwidth = 2, position = "dodge", alpha = 0.8) +
+  scale_fill_manual(values = c("steelblue", "firebrick"),
+                    labels = c("Not Impaired", "Impaired")) +
+  labs(title = "Baseline Age by Impairment Status",
+       x = "Age at First Visit", y = "Count", fill = "Outcome") +
+  theme_minimal()
+```
+
+## Model Specification
+
+We model the probability that a patient's MMSE eventually falls below 24 as P(impaired = 1) = sigmoid(w0 + w1 * age + w2 * mmse_baseline).
+
+Since logistic regression doesn't have a conjugate prior, we can't do Gibbs sampling, so we are using Metropolis-Hastings sampling.
+
+## Train/Test Split
+
+We do an 80/20 split at the patient level.
+
+```{r split}
+n          <- nrow(patient_summary)
+train_idx  <- sample(seq_len(n), floor(n * 0.8))
+train_df   <- patient_summary[train_idx, ]
+test_df    <- patient_summary[-train_idx, ]
+
+cat("Training patients:", nrow(train_df), "\n")
+cat("Test patients:    ", nrow(test_df),  "\n")
+```
+
+## Bayesian Logistic Regression via MCMC
+
+We run Metropolis-Hastings for 10,000 iterations, discarding the first 2,000 as burn‑in. This gives us a matrix of posterior samples for the three weights.
+
+```{r mcmc, message=FALSE, warning=FALSE}
+library(MCMCpack)
+
+X_train <- cbind(1, train_df$age_baseline, train_df$mmse_baseline)
+y_train <- train_df$impaired
+
+LOGIT_FILE <- "/Users/kkmanas/ds4420-finalproject/bayesian/logit_samples.rds"
+
+if (file.exists(LOGIT_FILE)) {
+  logit_samples <- readRDS(LOGIT_FILE)
+  cat("Loaded saved logistic regression samples.\n")
+} else {
+  logit_samples <- MCMClogit(
+    impaired ~ age_baseline + mmse_baseline,
+    data     = train_df,
+    burnin   = 2000,
+    mcmc     = 10000,
+    b0       = 0,       # prior mean for all weights
+    B0       = 0.01,    # prior precision (1/variance = 1/100, so variance=100)
+    verbose  = 500
+  )
+  saveRDS(logit_samples, LOGIT_FILE)
+  cat("Samples saved.\n")
+}
+
+cat("Posterior samples shape:", dim(logit_samples), "\n")
+```
+
+## Convergence Diagnostics
+
+Same as the linear regression model -> we check trace plots and R-hat to make sure the chain mixed well.
+
+```{r diagnostics, fig.height=4}
+par(mfrow = c(1, 3), mar = c(4, 4, 2, 1))
+plot(logit_samples[, 1], type = "l", main = "Trace: w0 (intercept)", ylab = "w0")
+plot(logit_samples[, 2], type = "l", main = "Trace: w1 (age)",       ylab = "w1")
+plot(logit_samples[, 3], type = "l", main = "Trace: w2 (MMSE)",      ylab = "w2")
+par(mfrow = c(1, 1))
+
+# R-hat (split-chain)
+rhat_single <- function(chain) {
+  n   <- length(chain)
+  h   <- floor(n / 2)
+  ch1 <- chain[1:h]
+  ch2 <- chain[(h + 1):(2 * h)]
+  W    <- (var(ch1) + var(ch2)) / 2
+  B    <- h * var(c(mean(ch1), mean(ch2)))
+  Vhat <- (1 - 1/h) * W + B / h
+  sqrt(Vhat / W)
+}
+
+rhats <- apply(as.matrix(logit_samples), 2, rhat_single)
+cat("R-hat values:\n")
+print(round(rhats, 3))
+cat("Max R-hat:", round(max(rhats), 3), "\n")
+```
+
+## Posterior Distributions
+
+```{r posterior, fig.height=4}
+samp_mat <- as.matrix(logit_samples)
+colnames(samp_mat) <- c("w0_intercept", "w1_age", "w2_mmse")
+
+par(mfrow = c(1, 3), mar = c(4, 4, 2, 1))
+hist(samp_mat[, "w0_intercept"], breaks = 40, col = "steelblue",
+     main = "Posterior: w0 (intercept)", xlab = "w0")
+hist(samp_mat[, "w1_age"], breaks = 40, col = "steelblue",
+     main = "Posterior: w1 (age)", xlab = "w1")
+abline(v = 0, col = "red", lty = 2)
+hist(samp_mat[, "w2_mmse"], breaks = 40, col = "steelblue",
+     main = "Posterior: w2 (baseline MMSE)", xlab = "w2")
+abline(v = 0, col = "red", lty = 2)
+par(mfrow = c(1, 1))
+
+cat("Posterior means:\n")
+cat("  w0 (intercept):     ", round(mean(samp_mat[, "w0_intercept"]), 3), "\n")
+cat("  w1 (age):           ", round(mean(samp_mat[, "w1_age"]), 3), "\n")
+cat("  w2 (baseline MMSE): ", round(mean(samp_mat[, "w2_mmse"]), 3), "\n")
+
+cat("\n89% Credible Intervals:\n")
+for (j in 1:3) {
+  ci <- quantile(samp_mat[, j], c(0.055, 0.945))
+  cat(" ", colnames(samp_mat)[j], ":", round(ci, 3), "\n")
+}
+```
+
+## Predictions on Test Set
+
+For each test patient, we find the posterior probability of decline by averaging the sigmoid of the linear predictor across all posterior samples. This gives us the probability distribution of possible outcomes.
+
+```{r predictions}
+sigmoid <- function(x) 1 / (1 + exp(-x))
+
+X_test <- cbind(1, test_df$age_baseline, test_df$mmse_baseline)
+
+# Find predicted probability for each test patient (for each posterior sample) 
+pp_mat <- sigmoid(samp_mat %*% t(X_test))   # (n_samples x n_test)
+
+# Calculate the mean
+pred_probs <- colMeans(pp_mat)
+
+# 89% credible interval on predicted probability
+pred_lower <- apply(pp_mat, 2, quantile, 0.055)
+pred_upper <- apply(pp_mat, 2, quantile, 0.945)
+
+test_results <- data.frame(
+  NACCID     = test_df$NACCID,
+  true_label = test_df$impaired,
+  pred_prob  = pred_probs,
+  pred_lower = pred_lower,
+  pred_upper = pred_upper,
+  pred_label = as.integer(pred_probs > 0.5)
+)
+
+cat("Test observations:", nrow(test_results), "\n")
+head(test_results)
+```
+
+## Evaluation
+
+```{r evaluation}
+# Accuracy
+accuracy <- mean(test_results$pred_label == test_results$true_label)
+cat("Accuracy:         ", round(accuracy * 100, 1), "%\n")
+
+# Confusion matrix
+conf_mat <- table(Predicted = test_results$pred_label,
+                  Actual    = test_results$true_label)
+cat("\nConfusion Matrix:\n")
+print(conf_mat)
+
+# AUC
+library(pROC)
+roc_obj <- roc(test_results$true_label, test_results$pred_prob, quiet = TRUE)
+cat("\nAUC:", round(auc(roc_obj), 3), "\n")
+
+# mean predicted prob vs actual rate by intervals of 10
+test_results$decile <- cut(test_results$pred_prob, breaks = 10)
+calib <- aggregate(cbind(pred_prob, true_label) ~ decile, data = test_results, mean)
+cat("\nCalibration (predicted vs actual):\n")
+print(round(calib[, c("pred_prob", "true_label")], 3))
+```
+
+## Uncertainty Visualization
+
+This plot shows each test patient's predicted probability of decline (posterior mean).
+
+```{r uncertainty-viz, fig.height=6, fig.width=10}
+library(ggplot2)
+
+test_results$NACCID_ordered <- reorder(test_results$NACCID, test_results$pred_prob)
+
+ggplot(test_results, aes(x = NACCID_ordered, y = pred_prob,
+                          color = factor(true_label))) +
+  geom_point(size = 1.5) +
+  geom_errorbar(aes(ymin = pred_lower, ymax = pred_upper), width = 0, alpha = 0.4) +
+  geom_hline(yintercept = 0.5, linetype = "dashed", color = "gray40") +
+  scale_color_manual(values = c("steelblue", "firebrick"),
+                     labels = c("Not Impaired", "Impaired")) +
+  labs(title    = "Posterior Predictive Probability of Impairment (Test Set)",
+       subtitle = "Error bars = 89% credible interval | Dashed line = 0.5 threshold",
+       x        = "Patient (sorted by predicted probability)",
+       y        = "P(MMSE < 24)",
+       color    = "True Outcome") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.position = "bottom")
+```
+
+## Summary
+
+We fit a Bayesian logistic regression model to predict whether patients' MMSE will eventually fall below 24, which is the standard cutoff for mild cognitive impairment. We did this prediction using the baseline age and their baseline MMSE score. Rather than using the Gibbs sampler, we used a Metropolis-Hastings sampler since logistic regression has no closed-form posterior. 
+
+The result gives us a posterior distribution over the three model weights, which we used to find predictive probabilities for each test patient. Compared to the linear model, this provides more actionable insight -> we can determine whether a patient is likely to enter the more impaired range based on their first few visits.
