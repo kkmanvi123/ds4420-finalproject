@@ -249,6 +249,25 @@ python runner.py \
 --weight_decay 1e-4 \
 --run_name "fdg_pet_MEMORY_classification_baseline_leakyrelu"
 
+echo "\n--- Tuning: FDG_PET, Target: MEMORY | tune5 ---"
+python runner.py \
+--data_dir ../data \
+--save_model \
+--save_dir outputs \
+--modality fdg_pet \
+--target_col MEMORY \
+--task classification \
+--n_components 0.95 \
+--epochs 25 \
+--batch_size 64 \
+--lr 1e-3 \
+--hidden_dims 256,128,64 \
+--dropout 0.3 \
+--activation leaky_relu \
+--use_batchnorm \
+--weight_decay 1e-3 \
+--run_name "fdg_pet_MEMORY_classification_pca0.95_h256-128-64_do0.3_lr0.001_bs64_e25_leakyrelu"
+
 # Tuning: MRI + NACCMOCA regression
 # Baseline: mri_NACCMOCA_regression_baseline
 
@@ -324,22 +343,3 @@ python runner.py \
 --use_batchnorm \
 --weight_decay 1e-4 \
 --run_name "mri_NACCMOCA_regression_baseline_gelu" 
-
-echo "\n--- Tuning: FDG_PET, Target: MEMORY | tune5 ---"
-python runner.py \
---data_dir ../data \
---save_model \
---save_dir outputs \
---modality fdg_pet \
---target_col MEMORY \
---task classification \
---n_components 0.95 \
---epochs 25 \
---batch_size 64 \
---lr 1e-3 \
---hidden_dims 256,128,64 \
---dropout 0.3 \
---activation leaky_relu \
---use_batchnorm \
---weight_decay 1e-3 \
---run_name "fdg_pet_MEMORY_classification_pca0.95_h256-128-64_do0.3_lr0.001_bs64_e25_leakyrelu"
