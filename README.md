@@ -54,7 +54,8 @@ The full pipleine can be run as a single command with `python runner.py` specifi
 ### Model 3: Bayesian Model
 The Bayesian approach to modeling cognitive decline represents predictions as probability distributions and explicitly incorporates uncertainty. Using the longitudinal clinical visit data, the bayesian model attempts to estimate the probability of cognitive decline given prior observations and patient characteristics. The model then updates beliefs once new patient data is observed. 
 
-Exact modeling strategy TBD as Bayesian Modeling unit is taught!  
+Two Bayesian models were implemented using longitudinal MMSE scores from the NACC clinical visit data.
+1. Bayesian Linear Regression: Models each patient's MMSE as a linear function of age using a Normal-Inverse-Gamma conjugate prior and a custom Gibbs sampler (2,000 iterations per patient). The prior mean is set via empirical Bayes across all training patients. Evaluated using RMSE and 89% credible interval coverage on held-out visits.
+2. Bayesian Logistic Regression: Predicts whether a patient's MMSE will eventually fall below 24 (the clinical impairment cutoff) using only their baseline age and MMSE score. Metropolis-Hastings sampling is used via MCMCpack (10,000 iterations, 2,000 burn-in).
 
-
-
+Both models are implemented in R — knit the `.Rmd` files in the `bayesian/` directory to run them. Pre-computed sampling files are already saved in that directory, so the MCMC steps will be skipped automatically if you don't want to re-run them.
