@@ -32,20 +32,14 @@ This dataset is used for the Multi-Layered Perceptron to predict cognitive decli
 This project evaluates three different machine learning approaches for predicting cognitive decline using clinical and neuroimaging-derived data. Each model uses a different representation of patient information to predict overall cognitive decline. The methods are designed to capture patterns between patients and make an accurrate prediction for a given patient. 
 
 ### Model 1: Collaborative Filtering Model
-The Collaborative Filtering (CF) model uses longitudinal cognitive test scores to identify similarities between patients and predict future cognitive outcomes. The model is inspired by a typical CF model that predicts missing points for a given user based on `k` similar users. 
+The Collaborative Filtering (CF) model uses longitudinal cognitive test scores to identify similarities between patients and predict missing cognitive variables. The model is inspired by a typical user-user CF model that predicts missing points for a given user based on `k` similar users. 
 
-The UDS contains multiple visits from the same patient with each visit contained in a row. The "age" variable allows for the data to be transformed into a matrix with the users as rows and the columns as ages (or bins). Each cell contains a cognitive score such as the Mini-Mental State Examination (MMSE) (ranked up to 30 with lower scores indicating more severe decline). An example of the structure is shown below.
+The UDS contains multiple visits from the same patient with each visit contained in a row. These observations contained over 1,900 different clinical features, so we filtered the number of predictor variables in order to avoid sparsity issues in the data set. Since these variables vary in their value ranges (ex. 0-3 for speech and 0-30 for MMSE), values were first standardized by the feature deviation before traditional user-based standardization was applied. This standardization was then taken into account when calculating predictions so that predicted scores would match the original data ranges.
 
-| Patient | Age 60 | Age 62 | Age 64 | Age 66 |
-| ------- | ------ | ------ | ------ | ------ |
-| U1      | 29     | 28     | 27     | 25     |
-| U2      | 30     | ?      | 29     | ?      |
-| U3      | 28     | 26     | 24     | 22     |
-
-The goal of the model is to predict missing future (and past) values for a patient by identifying other patients with similar historical score trajectories. Since the original dataset contains ~55,000 users, data preprocessing and filtering techniques are used to shrink the pool size. Additionally, a Simon Funk based approach can be implemented to learn the latent factors and avoid creating the entire user x user matrix.
+The goal of the model is to predict missing future (and past) values for a patient by identifying other patients with similar historical score trajectories. Since the original dataset contains ~55,000 users, data preprocessing and filtering techniques are used to shrink the pool size. Leave-one-out cross validation was then utilized to determine the optimal set of hyperparameters for predicting missing features.
 
 ### Model 2: Multi-Layer Perceptron
-The Multi-Layer Perceptron (MLP) model uses structural data derived from MRI/PET image scans. The data captured represents physical measurements of the brain which have variables that are correlated. Principal Component Analysis (PCA) is used to reduce the dimensionality of the data by determining the latent factors and transforming the data into uncorrelated variables. The number of principal components is specified as `k` and the results from PCA are passed into the MLP. The goal of the MLP is to learn nonlinear relationships between structural brain features and cognitive outcomes to predict either Alzheimer's (binary) or a cognitive score such as MMSE.
+The Multi-Layer Perceptron (MLP) model uses structural data derived from MRI/PET image scans. The data captured represents physical measurements of the brain which have variables that are correlated. Principal Component Analysis (PCA) is used to reduce the dimensionality of the data by determining the latent factors and transforming the data into uncorrelated variables. The number of principal components is specified as `k` and the results from PCA are passed into the MLP. The goal of the MLP is to learn nonlinear relationships between structural brain features and cognitive outcomes to predict either Alzheimer's (classification) or a cognitive score such as MMSE.
 
 MRI derived data --> PCA --> Results as Input to MLP --> Train MLP --> Predict score
 
