@@ -43,7 +43,7 @@ The Multi-Layer Perceptron (MLP) model uses structural data derived from MRI/PET
 
 MRI derived data --> PCA --> Results as Input to MLP --> Train MLP --> Predict score
 
-The full pipleine can be run as a single command with `python runner.py` specifing a number of command line arguments. Alternatively, some commands have been compiled into `run_models.sh` and the shell script can be executed from the command line. 
+The full pipleine can be run as a single command with `python runner.py` specifing a number of command line arguments. Alternatively, some commands have been compiled into `run_models.sh` and the shell script can be executed from the command line. Note: Hws for DS4440 were used as a code skeleton inspiration.
 
 ### Model 3: Bayesian Model
 The Bayesian approach to modeling cognitive decline represents predictions as probability distributions and explicitly incorporates uncertainty. Using the longitudinal clinical visit data, the bayesian model attempts to estimate the probability of cognitive decline given prior observations and patient characteristics. The model then updates beliefs once new patient data is observed. 
